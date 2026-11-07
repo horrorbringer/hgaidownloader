@@ -1,0 +1,51 @@
+purpose:
+  stands_in_for: Public GitHub releases API, SHA256SUMS.txt asset, and Windows setup asset.
+  unblocks: Offline updater verification without publishing releases or executing test installers.
+assumptions:
+  - id: public-release-contract
+    status: supported
+    claim: Public GitHub release metadata and browser_download_url assets can be read without an app token.
+    reason: GitHub's official REST releases and assets documentation describes public unauthenticated access.
+    verification: Contract read on 2026-11-07; live public repository and release-list GETs returned HTTP 200.
+    source: https://docs.github.com/en/rest/releases/releases#list-releases
+    updated_at: 2026-11-07
+  - id: repository-publication-state
+    status: supported
+    claim: The repository had no published releases when this updater was implemented.
+    reason: The live release-list response was an empty JSON array; the repository metadata reported private=false.
+    verification: GET https://api.github.com/repos/horrorbringer/hgaidownloader/releases?per_page=20 returned [] on 2026-11-07.
+    source: https://api.github.com/repos/horrorbringer/hgaidownloader/releases?per_page=20
+    updated_at: 2026-11-07
+  - id: download-failure-boundary
+    status: supported
+    claim: In the simulated cases, cancelled, truncated, checksum-mismatched, or subsequently modified downloads were not executed.
+    reason: Actual local HTTP requests exercised release discovery, asset reads, timeouts, rate limits, and corrupt downloads. Installer spawning was intercepted in source tests.
+    verification: tests/test_app_updates.py passed 15 tests on Windows on 2026-11-07. These tests do not establish TLS or real GitHub asset delivery behavior.
+    source: tests/test_app_updates.py
+    updated_at: 2026-11-07
+  - id: published-update-installation
+    status: unknown
+    claim: A newer version can be downloaded and installed from this repository's actual published release assets.
+    reason: No releases were published at implementation time. Local HTTP stand-ins cannot establish real asset publication or public release compliance.
+    verification: Requires publishing matching setup/checksum assets after the release review, then upgrading an older installed build through that public channel.
+    source: RELEASING.md
+    updated_at: 2026-11-07
+  - id: github-cdn-transport
+    status: supported
+    claim: The production HTTP client followed a live GitHub release-asset redirect with normal TLS validation.
+    reason: ReleaseClient opened the official Inno Setup asset, reached release-assets.githubusercontent.com, and read its MZ signature. The file was not downloaded in full or executed.
+    verification: Live source-client check on 2026-11-07; the packaged Updates window also reached the real configured GitHub release API and reported no newer published installer.
+    source: app_updates.py
+    updated_at: 2026-11-07
+  - id: installed-upgrade-handoff
+    status: supported
+    claim: The verified local beta.2 installer upgraded the existing beta.1 installation and restarted the app without changing its settings or library.
+    reason: launch_installer ran the real setup, the registered version became beta.2 at the same path, the installed executable matched the tested bundle, and settings/library SHA-256 values were unchanged. A backup was made first.
+    verification: Observed on this Windows 11 PC on 2026-11-07. The restarted app exposed its Updates control. This exercised the local installer handoff, not a download from this repository's still-unpublished release assets.
+    source: release/0.1.0-beta.2/INSTALLED_UPGRADE_TEST.json
+    updated_at: 2026-11-07
+fingerprints:
+  - id: updater-implementation
+    date: 2026-11-07
+    commit: bd2bc2c plus dirty beta.2 implementation
+    cli: Postman CLI unavailable; Python unittest uses a local real HTTP stand-in and injects only the transport mapping. Owner mock discovery was skipped.

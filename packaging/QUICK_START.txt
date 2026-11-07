@@ -1,7 +1,7 @@
-Series Downloader 0.1.0-beta.1 — Windows x64
+Series Downloader 0.1.0-beta.2 — Windows x64
 
 INSTALLER
-Run SeriesDownloader-0.1.0-beta.1-windows-x64-setup.exe.
+Run SeriesDownloader-0.1.0-beta.2-windows-x64-setup.exe.
 The installer works for the current user without administrator rights.
 Launch Series Downloader from the Start menu.
 
@@ -20,6 +20,17 @@ Logs: %LOCALAPPDATA%\SeriesDownloader\logs
 Default downloads: %USERPROFILE%\Downloads\SeriesDownloader
 Updates and uninstall preserve settings, library, and downloaded media.
 The ZIP build uses the same user profile as the installed build.
+
+UPDATES
+The app checks GitHub for new versions in the background on startup.
+Click Updates at any time to check manually. A newer published version enables
+Download update. After SHA-256 verification, click Install and restart.
+Finish or cancel active downloads/cleanup before installing. Your settings,
+library, and media are preserved. The app never installs an update silently
+without the Install and restart action. The installer displays update progress.
+The repository must have published release assets for an update to be offered.
+Beta builds receive newer beta and stable releases; stable builds receive stable
+releases. ZIP users can use the same update flow to install the new app per user.
 
 This preview is not digitally signed. Check SHA256SUMS.txt to verify file integrity.
 See THIRD_PARTY_NOTICES.md and licenses for included software notices.

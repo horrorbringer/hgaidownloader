@@ -91,6 +91,72 @@ def run_self_test(report_path=None):
 
             check("Recycle Bin integration", recycle)
 
+            def updater():
+                from urllib.parse import urlsplit
+                from urllib.request import Request, urlopen
+                from app_updates import ReleaseClient, UpdateError, download_update, launch_installer
+                from app_version import UPDATE_REPOSITORY
+                import hashlib
+                version = f"{int(APP_VERSION.split('.')[0]) + 1}.0.0"
+                filename = f"SeriesDownloader-{version}-windows-x64-setup.exe"
+                prefix = f"https://github.com/{UPDATE_REPOSITORY}/releases/download/v{version}/"
+                payload = b"MZ" + b"local update diagnostic; never execute this file" * 200
+                digest = hashlib.sha256(payload).hexdigest()
+                metadata = [{"tag_name": "v" + version, "prerelease": False, "draft": False,
+                    "assets": [{"name": filename, "state": "uploaded", "size": len(payload),
+                                "digest": "sha256:" + digest, "browser_download_url": prefix + filename},
+                               {"name": "SHA256SUMS.txt", "state": "uploaded",
+                                "browser_download_url": prefix + "SHA256SUMS.txt"}]}]
+                routes = {f"/repos/{UPDATE_REPOSITORY}/releases?per_page=20": json.dumps(metadata).encode(),
+                          urlsplit(prefix + filename).path: payload,
+                          urlsplit(prefix + "SHA256SUMS.txt").path: f"{digest}  {filename}\n".encode()}
+                requested = []
+
+                class Handler(http.server.BaseHTTPRequestHandler):
+                    def do_GET(self):
+                        requested.append(self.path)
+                        body = routes.get(self.path, b"unmodelled route")
+                        self.send_response(200 if self.path in routes else 501)
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+
+                    def log_message(self, *_args):
+                        pass
+
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+
+                def transport(request, *, timeout):
+                    parsed = urlsplit(request.full_url)
+                    path = parsed.path + ("?" + parsed.query if parsed.query else "")
+                    return urlopen(Request(f"http://127.0.0.1:{server.server_port}" + path,
+                                          headers=dict(request.headers)), timeout=timeout)
+
+                try:
+                    client = ReleaseClient(open_request=transport)
+                    update = client.check(APP_VERSION)
+                    if not update or update.version != version:
+                        raise RuntimeError("The packaged updater did not discover the simulated release")
+                    artifact = download_update(client, update, base / "update-cache", threading.Event())
+                    if artifact.path.read_bytes() != payload or len(requested) != 3:
+                        raise RuntimeError("The packaged updater failed its HTTP download check")
+                    artifact.path.write_bytes(b"tampered; must never be executed")
+                    try:
+                        launch_installer(artifact)
+                    except UpdateError:
+                        pass
+                    else:
+                        raise RuntimeError("The updater accepted a tampered installer")
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
+                return "Local HTTP release discovery, SHA-256 download, and tamper rejection; no installer executed"
+
+            check("packaged updater against a local release server", updater)
+
             def hls():
                 import download_core
                 from series_gui_all import video_is_playable

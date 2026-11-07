@@ -5,8 +5,8 @@ Python/Tkinter download core with Playwright, yt-dlp, and FFmpeg.
 
 ## Windows release
 
-The first packaged preview is **0.1.0-beta.1**, for Windows x64. Build outputs are
-under `release/0.1.0-beta.1/`: a setup EXE, a ZIP distribution, SHA-256 checksums,
+The packaged preview is **0.1.0-beta.2**, for Windows x64. Build outputs are
+under `release/0.1.0-beta.2/`: a setup EXE, a ZIP distribution, SHA-256 checksums,
 quick-start instructions, third-party notices, and the frozen-app test report.
 Python, Chromium, FFmpeg, and FFprobe are included. The beta is unsigned.
 
@@ -17,6 +17,27 @@ and logs are shared between the ZIP and installed builds and live under
 and downloaded media. New profiles default to `%USERPROFILE%\Downloads\SeriesDownloader`.
 
 See [RELEASING.md](RELEASING.md) for build, verification, and public release steps.
+
+## Application updates
+
+The app checks `horrorbringer/hgaidownloader`'s public GitHub releases in the
+background at startup. Click **Updates** to check manually. When a newer Windows
+installer is published, choose **Download update**, then **Install and restart**.
+Downloads show progress and can be cancelled. Size and SHA-256 checks must pass
+before installation, and the file is verified again immediately before launch.
+The app saves its profile and blocks installation during downloads or cleanup.
+Settings, library, and downloaded media remain outside the installation folder.
+
+An installed beta receives newer beta or stable releases. A stable version ignores
+prereleases. Releases must include the exact versioned Windows setup EXE and
+`SHA256SUMS.txt`; incomplete releases are ignored. A Git tag alone is not an
+update. ZIP users can use the update flow to install the newer version per user;
+it does not replace their extracted ZIP folder. Startup network failures are
+nonblocking, and opening Updates shows the result and retry controls.
+
+These are HTTPS and hash integrity checks, not an independent publisher signature.
+The beta's installers are unsigned. See the release guide for publication and
+code-signing requirements.
 
 ## Run
 

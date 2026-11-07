@@ -35,6 +35,7 @@ from series_identity import folder_owner
 from app_runtime import (LIBRARY_NAME, SETTINGS_NAME, default_download_dir,
                          prepare_user_data, resource_dir, user_data_dir)
 from app_version import APP_NAME, APP_VERSION
+from updates_ui import UpdateController
 
 MEDIA_URL_PATTERN = re.compile(r"\.(m3u8|mp4|mpd)(\?.*)?$", re.IGNORECASE)
 SETTINGS_FILE = user_data_dir() / SETTINGS_NAME
@@ -421,7 +422,7 @@ class RoundedActionButton(tk.Canvas):
 
 
 class SeriesDownloaderApp:
-    def __init__(self, root: tk.Tk, library_path: Path | None = None):
+    def __init__(self, root: tk.Tk, library_path: Path | None = None, *, check_updates_on_startup=False):
         self.root = root
         self.root.title(f"{APP_NAME} {APP_VERSION}")
         self.root.geometry("960x640")
@@ -536,6 +537,11 @@ class SeriesDownloaderApp:
         self.system_status_var = tk.StringVar(value="Checking storage and FFmpeg...")
         ttk.Label(brand_row, textvariable=self.system_status_var,
                   style="Section.TLabel").pack(side=tk.RIGHT)
+        self.updater = UpdateController(root, is_busy=lambda: self.running or self.delete_running,
+                                        before_install=self.prepare_update_install, close_app=self.close_app)
+        self.update_btn = ttk.Button(brand_row, text="Updates", command=self.updater.show)
+        self.update_btn.pack(side=tk.RIGHT, padx=10)
+        self.updater.button = self.update_btn
         ttk.Label(top_frame, text="Series URL", style="Section.TLabel").pack(anchor=tk.W)
         self.url_var = tk.StringVar(value=settings.get("url") or "https://huangguoai.com/video/10007")
         url_row = ttk.Frame(top_frame)
@@ -778,13 +784,21 @@ class SeriesDownloaderApp:
         elif hasattr(self.library, "recovery_backup"):
             self.log(f"Library backup saved to: {self.library.recovery_backup}")
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
+        if check_updates_on_startup:
+            self.root.after(2000, self.updater.check)
+
+    def prepare_update_install(self):
+        if hasattr(self.library, "temporary_directory"):
+            raise RuntimeError("Finish library recovery before installing an update.")
+        if self.remember_settings() is False or self.save_current_library() is False:
+            raise RuntimeError("Settings or library could not be saved. Resolve the save error before updating.")
 
     def save_current_library(self):
         if not self.library_can_save:
-            return
+            return False
         url = getattr(self, "current_series_url", "")
         if not url:
-            return
+            return True
         records = []
         for item in self.episode_order:
             number = int(item.removeprefix("ep-"))
@@ -798,8 +812,10 @@ class SeriesDownloaderApp:
                               getattr(self, "current_output_root", self.output_var.get()),
                               getattr(self, "current_series_folder", ""), records)
             self.library_dirty = False
+            return True
         except (OSError, sqlite3.Error) as exc:
             self.log(f"[!] Could not save the library: {exc}")
+            return False
 
     def load_library_series(self, url: str, *, save_previous: bool = True):
         if self.running or self.delete_running:
@@ -1183,8 +1199,10 @@ class SeriesDownloaderApp:
             save_settings(url, self.output_var.get().strip(), self.recent_urls,
                           self.pending_urls, self.history, self.prefer_hevc_var.get(),
                           self.marked_episodes)
+            return True
         except OSError as exc:
             self.log(f"[!] Could not save settings: {exc}")
+            return False
 
     def clear_recent(self):
         self.recent_urls.clear()
@@ -2722,7 +2740,7 @@ def main():
     except (AttributeError, OSError):
         pass
     root = tk.Tk()
-    app = SeriesDownloaderApp(root)
+    app = SeriesDownloaderApp(root, check_updates_on_startup=True)
     root.mainloop()
 
 

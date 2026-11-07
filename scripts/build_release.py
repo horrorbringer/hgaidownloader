@@ -69,7 +69,7 @@ def compiler(path, build):
 def collect_licenses(destination):
     destination.mkdir(parents=True, exist_ok=True)
     distributions = ("playwright", "yt-dlp", "Send2Trash", "pywin32", "greenlet",
-                     "pyee", "typing_extensions", "pyinstaller")
+                     "pyee", "typing_extensions", "packaging", "pyinstaller")
     for name in distributions:
         package = importlib.metadata.distribution(name)
         for entry in package.files or []:

@@ -39,6 +39,13 @@ Name: "{autodesktop}\Series Downloader"; Filename: "{app}\SeriesDownloader.exe";
 
 [Run]
 Filename: "{app}\SeriesDownloader.exe"; Description: "Launch Series Downloader"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\SeriesDownloader.exe"; Flags: nowait skipifnotsilent runasoriginaluser; Check: IsUpdateInstall
 
-; User profiles and downloaded media are deliberately outside {app} and remain
-; in place during upgrades and uninstall. Do not add [UninstallDelete] entries.
+[Code]
+function IsUpdateInstall: Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATE|0}') = '1';
+end;
+
+// User profiles and downloaded media remain outside the application directory.
+// Do not add uninstall deletion rules for those files.

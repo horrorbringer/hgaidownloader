@@ -5,4 +5,5 @@ pyee==14.0.0
 typing_extensions==4.16.0
 yt-dlp==2026.10.26
 Send2Trash==2.1.0
+packaging==26.3
 pywin32==312; sys_platform == "win32"

@@ -86,6 +86,38 @@ Start menu shortcut and uninstall registration. Detailed logs remain under
 `build/installer-check-*`; a passing report is saved as `INSTALLER_TEST.json`.
 If you add that report after the build, regenerate `SHA256SUMS.txt` before sharing.
 
+## Publishing updates
+
+The app reads public releases from `horrorbringer/hgaidownloader`, configured in
+`app_version.py`. It uses GitHub's release list rather than the latest-stable-only
+endpoint so installed betas can also receive newer prereleases. Stable builds
+ignore prereleases. Tags alone are not offered to users.
+
+For each reviewed new version, create a GitHub release with a matching tag such
+as `v0.1.0-beta.2`, then upload both of these build outputs:
+
+- `SeriesDownloader-0.1.0-beta.2-windows-x64-setup.exe`
+- `SHA256SUMS.txt`
+
+Use the new version in each filename/tag. Keep the release as a draft until all
+assets are uploaded and verified, then publish it. The updater ignores drafts,
+incomplete releases, older versions, mismatched repository URLs, and duplicate
+assets. No GitHub token is embedded or required by the installed app. A private
+repository cannot serve this unauthenticated public update channel.
+
+Users install beta.2 once to get the updater; beta.1 does not contain update code.
+Subsequent launches check in the background, and **Updates** provides a manual
+check. Users explicitly download and choose **Install and restart**. Downloading
+alone never runs the installer. Updates cannot interrupt active downloads or
+cleanup. The downloaded executable is hashed again before launch, the profile is
+saved first, and setup restarts the updated app after installation. ZIP users are
+offered a per-user installation rather than an in-place ZIP replacement.
+
+TLS and SHA-256 detect transport/file corruption and inconsistent assets; they
+are not an independent publisher signature if the release account is compromised.
+Finish the code-signing and source/license work below before public distribution.
+See `tests/update_api.context.yaml` for live versus simulated verification evidence.
+
 You can rerun diagnostics without opening the normal app:
 
 ```powershell

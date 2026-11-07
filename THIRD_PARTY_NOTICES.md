@@ -16,6 +16,7 @@ copyright notices continue to apply. Collected license files are in
 | greenlet | https://github.com/python-greenlet/greenlet | MIT / PSF |
 | pyee | https://github.com/jfhbrook/pyee | MIT |
 | typing_extensions | https://github.com/python/typing_extensions | PSF |
+| packaging | https://github.com/pypa/packaging | Apache-2.0 / BSD-2-Clause |
 | PyInstaller bootloader | https://github.com/pyinstaller/pyinstaller | GPL with distribution exception |
 | FFmpeg and FFprobe | https://ffmpeg.org/ and https://www.gyan.dev/ffmpeg/builds/ | See the bundled build's LICENSE and README |
 

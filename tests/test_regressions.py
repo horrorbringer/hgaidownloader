@@ -393,6 +393,25 @@ class GuiRegressionTests(unittest.TestCase):
             self.assertTrue(options['hls_prefer_native'])
             self.assertFalse(options['skip_unavailable_fragments'])
 
+    def test_updates_button_opens_a_nonblocking_check_dialog(self):
+        with patch.object(self.app.updater.client, 'check', return_value=None) as check:
+            self.app.update_btn.invoke()
+            deadline = time.monotonic() + 3
+            while self.app.updater.working and time.monotonic() < deadline:
+                self.root.update()
+                time.sleep(.01)
+            check.assert_called_once()
+        self.assertTrue(self.app.updater.window.winfo_exists())
+        self.assertIn('No newer published', self.app.updater.status)
+        self.assertFalse(self.app.updater.install_button.instate(['!disabled']))
+
+    def test_profile_save_failure_blocks_update_preparation(self):
+        with patch.object(self.app, 'remember_settings', return_value=False), \
+             patch.object(self.app, 'save_current_library') as save:
+            with self.assertRaisesRegex(RuntimeError, 'could not be saved'):
+                self.app.prepare_update_install()
+        save.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
