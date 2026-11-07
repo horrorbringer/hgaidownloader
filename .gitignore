@@ -1,6 +1,7 @@
 # Local IDE configuration and Python environments.
 .idea/
 .venv/
+.venv-release/
 venv/
 
 # Generated Python files and build output.
@@ -9,6 +10,7 @@ __pycache__/
 .pytest_cache/
 /build/
 /dist/
+/release/
 
 # Downloaded media and personal application state.
 /downloads/

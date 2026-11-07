@@ -3,12 +3,27 @@
 A Windows desktop downloader for multi-episode series. The app uses the existing
 Python/Tkinter download core with Playwright, yt-dlp, and FFmpeg.
 
+## Windows release
+
+The first packaged preview is **0.1.0-beta.1**, for Windows x64. Build outputs are
+under `release/0.1.0-beta.1/`: a setup EXE, a ZIP distribution, SHA-256 checksums,
+quick-start instructions, third-party notices, and the frozen-app test report.
+Python, Chromium, FFmpeg, and FFprobe are included. The beta is unsigned.
+
+Run the setup EXE for a per-user installation, or extract the whole ZIP and run
+`SeriesDownloader.exe` with its `_internal` folder beside it. Settings, library,
+and logs are shared between the ZIP and installed builds and live under
+`%LOCALAPPDATA%\SeriesDownloader`. Updates and uninstall preserve that profile
+and downloaded media. New profiles default to `%USERPROFILE%\Downloads\SeriesDownloader`.
+
+See [RELEASING.md](RELEASING.md) for build, verification, and public release steps.
+
 ## Run
 
 ```powershell
 python -m pip install -r requirements.txt
 python -m playwright install chromium
-python series_gui_all.py
+python app_launcher.py
 ```
 
 Use Python 3.12 or newer. Install FFmpeg and FFprobe on `PATH` for HLS downloads
@@ -63,9 +78,18 @@ decoding every frame.
 
 ## Library and download recovery
 
-The Library button opens saved series from `series_library.sqlite3`. Episode titles,
+The Library button opens saved series from `series_library.sqlite3` in the user data directory. Episode titles,
 statuses, paths, and priorities persist across restarts; the latest series is restored
 at startup. Settings and manually marked episodes remain in `series_gui_settings.json`.
+
+On Windows, both files are stored in `%LOCALAPPDATA%\SeriesDownloader`; on macOS,
+`~/Library/Application Support/SeriesDownloader`; on Linux, the XDG data directory
+under `series-downloader`. First launch from source copies legacy files beside the
+script into this profile without removing originals or replacing existing profile
+files. SQLite import uses a consistent backup, including committed WAL records.
+An installed copy also imports legacy files beside its executable if present;
+it does not search for other source checkouts. To transfer a profile to another
+computer, close the app and copy both files into its user data directory.
 
 Download directories include a source ID and `.series-source.json` ownership record.
 Series with identical titles use separate directories. Existing folders without an

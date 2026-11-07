@@ -32,9 +32,12 @@ from checkpoint_storage import inventory, selected_files, recycle_checkpoints
 from existing_media import (episode_candidates, available_output_template, inspect_folder,
                             conflicting_claims, registered_episode_paths)
 from series_identity import folder_owner
+from app_runtime import (LIBRARY_NAME, SETTINGS_NAME, default_download_dir,
+                         prepare_user_data, resource_dir, user_data_dir)
+from app_version import APP_NAME, APP_VERSION
 
 MEDIA_URL_PATTERN = re.compile(r"\.(m3u8|mp4|mpd)(\?.*)?$", re.IGNORECASE)
-SETTINGS_FILE = Path(__file__).with_name("series_gui_settings.json")
+SETTINGS_FILE = user_data_dir() / SETTINGS_NAME
 MAX_EPISODE_ATTEMPTS = 3
 RETRY_DELAYS = (2, 4)
 
@@ -62,6 +65,7 @@ def save_settings(url: str, output_dir: str, recent_urls: list[str],
             "history": history[:100], "prefer_hevc": prefer_hevc,
             "marked_episodes": marked_episodes or {}}
     temporary = SETTINGS_FILE.with_suffix(".tmp")
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(SETTINGS_FILE)
 
@@ -131,6 +135,7 @@ def video_is_playable(path: Path, expected_duration: float = 0) -> bool:
             [ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
              "stream=codec_name:format=duration", "-of", "json", str(path)],
             capture_output=True, text=True, timeout=15, check=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         info = json.loads(result.stdout)
         duration = float(info.get("format", {}).get("duration") or 0)
@@ -418,7 +423,7 @@ class RoundedActionButton(tk.Canvas):
 class SeriesDownloaderApp:
     def __init__(self, root: tk.Tk, library_path: Path | None = None):
         self.root = root
-        self.root.title("Series Downloader")
+        self.root.title(f"{APP_NAME} {APP_VERSION}")
         self.root.geometry("960x640")
         self.root.minsize(800, 540)
         self.root.update_idletasks()
@@ -480,9 +485,10 @@ class SeriesDownloaderApp:
                         relief="flat", font=("Segoe UI", 9, "bold"))
         style.map("Episodes.Treeview.Heading", background=[("active", "#e7eefb")])
         style.configure("TScrollbar", background=panel, troughcolor=bg, arrowcolor=muted)
-        icon_dir = Path(__file__).with_name("icons")
+        icon_dir = resource_dir() / "icons"
         self.icons = {name: tk.PhotoImage(file=str(icon_dir / f"{name}.png"))
                       for name in ("download", "folder", "history", "settings")}
+        self.root.iconphoto(True, self.icons["download"])
         self.log_queue: queue.Queue = queue.Queue()
         self.worker_context = threading.local()
         self.cancel_event = threading.Event()
@@ -499,7 +505,7 @@ class SeriesDownloaderApp:
         self.sort_reverse = False
         self.episode_order: list[str] = []
         self._displayed_selection: set[str] = set()
-        self.library = open_library(root, library_path or Path(__file__).with_name("series_library.sqlite3"))
+        self.library = open_library(root, library_path or prepare_user_data() / LIBRARY_NAME)
         self.library_dirty = False
         self.library_can_save = True
         settings = load_settings()
@@ -577,7 +583,7 @@ class SeriesDownloaderApp:
         ttk.Label(dir_frame, text="Save directory", style="Section.TLabel").pack(anchor=tk.W)
         dir_row = ttk.Frame(dir_frame)
         dir_row.pack(fill=tk.X, pady=(3, 0))
-        self.output_var = tk.StringVar(value=settings.get("output_dir") or str(Path("./downloads").resolve()))
+        self.output_var = tk.StringVar(value=settings.get("output_dir") or str(default_download_dir()))
         self.output_var.trace_add("write", lambda *_: self.refresh_system_status())
         ttk.Entry(dir_row, textvariable=self.output_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(dir_row, text="Browse...", command=self.choose_dir).pack(side=tk.LEFT, padx=(7, 0))
@@ -1106,7 +1112,8 @@ class SeriesDownloaderApp:
         if executable:
             try:
                 result = subprocess.run([executable, "-version"], capture_output=True,
-                                        text=True, timeout=4)
+                                        text=True, timeout=4,
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 match = re.search(r"ffmpeg version\s+(\S+)", result.stdout)
                 version = f"FFmpeg {match.group(1)}" if match else "FFmpeg available"
             except (OSError, subprocess.SubprocessError):
@@ -2120,7 +2127,7 @@ class SeriesDownloaderApp:
         destination = (getattr(self, "current_output_root", self.output_var.get())
                        if retry_only is not None else self.output_var.get())
         if scan_only and not destination.strip():
-            destination = str(Path('downloads').resolve())
+            destination = str(default_download_dir())
         if not destination.strip():
             messagebox.showwarning("Missing directory", "Choose a save directory.")
             return
@@ -2709,7 +2716,7 @@ class SeriesDownloaderApp:
         return result_summary
 
 
-if __name__ == "__main__":
+def main():
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except (AttributeError, OSError):
@@ -2717,3 +2724,11 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = SeriesDownloaderApp(root)
     root.mainloop()
+
+
+if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+    from app_runtime import configure_bundled_tools
+    configure_bundled_tools()
+    main()

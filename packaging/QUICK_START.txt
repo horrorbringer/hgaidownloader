@@ -1,0 +1,25 @@
+Series Downloader 0.1.0-beta.1 — Windows x64
+
+INSTALLER
+Run SeriesDownloader-0.1.0-beta.1-windows-x64-setup.exe.
+The installer works for the current user without administrator rights.
+Launch Series Downloader from the Start menu.
+
+ZIP
+Extract the entire ZIP to a writable folder, then run SeriesDownloader.exe.
+Keep the _internal folder beside the executable.
+
+USING THE APP
+Paste a series URL, click Scan Episodes, choose episodes and a save folder,
+then click Download Selected. Downloads can be cancelled and resumed.
+No Python, browser, or FFmpeg installation is required.
+
+DATA AND UPDATES
+Settings and library: %LOCALAPPDATA%\SeriesDownloader
+Logs: %LOCALAPPDATA%\SeriesDownloader\logs
+Default downloads: %USERPROFILE%\Downloads\SeriesDownloader
+Updates and uninstall preserve settings, library, and downloaded media.
+The ZIP build uses the same user profile as the installed build.
+
+This preview is not digitally signed. Check SHA256SUMS.txt to verify file integrity.
+See THIRD_PARTY_NOTICES.md and licenses for included software notices.
