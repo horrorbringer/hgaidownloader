@@ -1,0 +1,16 @@
+# Local IDE configuration and Python environments.
+.idea/
+.venv/
+venv/
+
+# Generated Python files and build output.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+/build/
+/dist/
+
+# Downloaded media and personal application state.
+/downloads/
+/series_gui_settings.json
+/series_library.sqlite3*

@@ -1,0 +1,10 @@
+# Keep text files consistent across platforms, including Windows checkouts.
+* text=auto eol=lf
+
+# Windows command scripts need CRLF line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Preserve binary image assets without line-ending conversion.
+*.png binary
+*.ico binary
