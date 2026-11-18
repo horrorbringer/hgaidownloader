@@ -97,6 +97,73 @@ curl.exe -s "https://api.telegram.org/bot$env:TOKEN/setWebhook" `
 Check it with `getWebhookInfo`. Re-run `setWebhook` after changing the worker
 hostname or the secret.
 
+## Deploy to Vercel and connect Telegram
+
+The current code requires Cloudflare's `Runner` Durable Object and container
+binding. The Vercel deployment steps below apply once the Vercel port is in
+place.
+
+### Prepare the Vercel port
+
+1. Expose the Hono routes in `src/index.ts` through a
+   [Vercel Node.js Function](https://vercel.com/docs/functions). Preserve
+   `/healthz`, `/telegram/webhook`, and the `/v1/*` routes.
+2. Replace the Durable Object with
+   [Vercel Workflow](https://vercel.com/docs/workflow) and persistent job state.
+   Keep the one-job-at-a-time limit, status polling, and cancellation. Enqueue
+   Telegram work durably before acknowledging the webhook, and deduplicate
+   retries by Telegram update ID.
+3. Run the media worker from `container/src/` in
+   [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox). Prepare a snapshot
+   with Chromium, yt-dlp, ffmpeg, ffprobe, and the worker code. Configure the
+   port to launch jobs from that snapshot. The sandbox should upload videos
+   directly to Telegram and post signed progress events to the Vercel API.
+
+### Deploy the port
+
+1. Import the repository in Vercel and set **Root Directory** to `serverless`
+   once it contains the Vercel entry point and workflow configuration.
+2. Create a bot with [@BotFather](https://t.me/BotFather). In the Vercel project's
+   production environment variables, set `TELEGRAM_BOT_TOKEN`,
+   `TELEGRAM_WEBHOOK_SECRET`, `ALLOWED_USER_IDS`, `API_KEY`, `INTERNAL_SECRET`,
+   and `ALLOWED_HOSTS` (for example, `huangguoai.com`). See
+   [Configuration](#configuration) for the optional chat settings. Configure
+   the workflow's job store and sandbox snapshot as required by the port.
+3. Deploy to production. Use a public HTTPS domain that Telegram can reach
+   without a Vercel login. Set `PUBLIC_BASE_URL` to that origin for job
+   callbacks and redeploy if you update it after the first deploy.
+4. Open `https://YOUR-PROJECT.vercel.app/healthz` and check for `{"ok":true}`.
+
+### Register the Vercel webhook
+
+In PowerShell, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` in the
+current session to the values configured in Vercel. The webhook secret can
+contain letters, digits, underscores, and hyphens. This command replaces the
+webhook for that bot, so run it after the production endpoint is ready.
+
+```powershell
+$botApi = "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN"
+$webhook = "https://YOUR-PROJECT.vercel.app/telegram/webhook"
+
+Invoke-RestMethod -Method Post -Uri "$botApi/setWebhook" `
+  -ContentType "application/json" `
+  -Body (@{
+    url = $webhook
+    secret_token = $env:TELEGRAM_WEBHOOK_SECRET
+    allowed_updates = @("message")
+  } | ConvertTo-Json)
+
+Invoke-RestMethod -Uri "$botApi/getWebhookInfo" |
+  Select-Object -ExpandProperty result
+```
+
+Check that `getWebhookInfo` shows your Vercel URL. Send `/start` from a user in
+`ALLOWED_USER_IDS`, then send `/episodes <series-url>` and
+`/dl <series-url> 1` to test episode discovery and video delivery. If Telegram
+doesn't get a reply, check `last_error_message` in `getWebhookInfo` and the
+Vercel function logs. See the [Telegram Bot API webhook
+reference](https://core.telegram.org/bots/api#setwebhook).
+
 ## Bot commands
 
 | Command | Action |
