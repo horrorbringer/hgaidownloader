@@ -4,7 +4,7 @@ import { formatRanges, parseEpisodeRange } from "./lib/range";
 import { escapeHtml, parseIdList } from "./lib/secure";
 import { validateSourceUrl } from "./lib/url";
 import { sendMessage } from "./telegram";
-import type { JobKind } from "./runner";
+import type { JobKind, JobRunner } from "./jobs";
 
 const HELP = [
   "<b>Series Downloader bot</b>",
@@ -21,14 +21,12 @@ const HELP = [
   "Commands: /status · /cancel · /help",
 ].join("\n");
 
-type RunnerStub = ReturnType<Env["RUNNER"]["get"]>;
-
 export async function handleUpdate(
   env: Env,
   update: unknown,
   origin: string,
 ): Promise<void> {
-  const runner = env.RUNNER.get(env.RUNNER.idFromName("global"));
+  const runner = env.runner;
   const body = update as {
     update_id?: number;
     message?: {
@@ -101,7 +99,7 @@ export async function handleUpdate(
 
 async function startJob(
   env: Env,
-  runner: RunnerStub,
+  runner: JobRunner,
   chatId: number,
   kind: JobKind,
   rawUrl: string | undefined,

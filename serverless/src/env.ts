@@ -1,7 +1,8 @@
-import type { Runner } from "./runner";
+import type { JobRunner } from "./jobs";
 
 export interface Env {
-  RUNNER: DurableObjectNamespace<Runner>;
+  runner: JobRunner;
+  defer?: (work: Promise<void>) => void;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   API_KEY: string;

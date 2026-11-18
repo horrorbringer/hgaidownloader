@@ -99,40 +99,60 @@ hostname or the secret.
 
 ## Deploy to Vercel and connect Telegram
 
-The current code requires Cloudflare's `Runner` Durable Object and container
-binding. The Vercel deployment steps below apply once the Vercel port is in
-place.
+The Vercel entry point in `api/http.ts` serves the same API and webhook paths.
+Vercel Queues starts jobs, Upstash Redis stores job state and enforces one
+active media job per deployment, and Vercel Sandbox runs the existing media
+worker. Videos go directly from the sandbox to Telegram. This deployment
+requires Vercel Pro or Enterprise with Fluid Compute for the 30-minute queue
+function, plus access to Vercel Container Registry and Sandbox custom images.
 
-### Prepare the Vercel port
+### Configure the Vercel project
 
-1. Expose the Hono routes in `src/index.ts` through a
-   [Vercel Node.js Function](https://vercel.com/docs/functions). Preserve
-   `/healthz`, `/telegram/webhook`, and the `/v1/*` routes.
-2. Replace the Durable Object with
-   [Vercel Workflow](https://vercel.com/docs/workflow) and persistent job state.
-   Keep the one-job-at-a-time limit, status polling, and cancellation. Enqueue
-   Telegram work durably before acknowledging the webhook, and deduplicate
-   retries by Telegram update ID.
-3. Run the media worker from `container/src/` in
-   [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox). Prepare a snapshot
-   with Chromium, yt-dlp, ffmpeg, ffprobe, and the worker code. Configure the
-   port to launch jobs from that snapshot. The sandbox should upload videos
-   directly to Telegram and post signed progress events to the Vercel API.
+1. Import the repo in Vercel. Set **Root Directory** to `serverless`, **Framework
+   Preset** to **Other**, and **Node.js Version** to **22.x**. Use the default
+   install settings and clear any build or output directory overrides.
+2. Connect an Upstash Redis database and make `UPSTASH_REDIS_REST_URL` and
+   `UPSTASH_REDIS_REST_TOKEN` available to the production environment. Use a
+   separate database for any preview that runs jobs.
+3. Create a bot with [@BotFather](https://t.me/BotFather). Set the following
+   production environment variables.
 
-### Deploy the port
+| Variable | Value |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Token from BotFather |
+| `TELEGRAM_WEBHOOK_SECRET` | Random secret shared with Telegram's webhook registration |
+| `ALLOWED_USER_IDS` | Comma-separated numeric Telegram user IDs |
+| `API_KEY` | Random secret for the `X-API-Key` header |
+| `INTERNAL_SECRET` | Separate random secret for signed media progress callbacks |
+| `PUBLIC_BASE_URL` | Public production origin, e.g. `https://hgaidownloader.vercel.app` |
+| `MEDIA_SANDBOX_IMAGE` | Vercel Container Registry repository and tag, e.g. `media-worker:v1` |
+| `ALLOWED_HOSTS` | Optional comma-separated source hosts, defaults to `huangguoai.com` |
 
-1. Import the repository in Vercel and set **Root Directory** to `serverless`
-   once it contains the Vercel entry point and workflow configuration.
-2. Create a bot with [@BotFather](https://t.me/BotFather). In the Vercel project's
-   production environment variables, set `TELEGRAM_BOT_TOKEN`,
-   `TELEGRAM_WEBHOOK_SECRET`, `ALLOWED_USER_IDS`, `API_KEY`, `INTERNAL_SECRET`,
-   and `ALLOWED_HOSTS` (for example, `huangguoai.com`). See
-   [Configuration](#configuration) for the optional chat settings. Configure
-   the workflow's job store and sandbox snapshot as required by the port.
-3. Deploy to production. Use a public HTTPS domain that Telegram can reach
-   without a Vercel login. Set `PUBLIC_BASE_URL` to that origin for job
-   callbacks and redeploy if you update it after the first deploy.
-4. Open `https://YOUR-PROJECT.vercel.app/healthz` and check for `{"ok":true}`.
+Set `DEFAULT_CHAT_ID` if you want REST callers to be able to omit `chat_id`.
+Set `ALLOWED_CHAT_IDS` for an explicit REST delivery allowlist.
+
+### Publish the media image and deploy
+
+From `serverless/`, link the local directory to the Vercel project and
+authenticate Docker for its registry. Run Docker Desktop before building.
+
+```powershell
+npx vercel@latest link
+npx vercel@latest vcr login docker
+$image = "vcr.vercel.com/YOUR-TEAM/YOUR-PROJECT/media-worker:v1"
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push -t $image ./container
+```
+
+Wait for Vercel to finish preparing the image, then set `MEDIA_SANDBOX_IMAGE`
+to `media-worker:v1` in the same project. Push the repo to the production branch
+or run `npx vercel@latest --prod` from the linked `serverless/` directory.
+When releasing a new media worker, build and push a new tag and update the
+environment variable before deploying.
+
+Open `https://YOUR-PROJECT.vercel.app/healthz` and check for `{"ok":true}`.
+The production endpoint must be publicly reachable for Telegram and media
+callbacks. The health endpoint checks HTTP startup. The Telegram smoke test
+below exercises the queue, Redis, and Sandbox.
 
 ### Register the Vercel webhook
 

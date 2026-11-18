@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "regions": ["iad1"],
+  "rewrites": [
+    { "source": "/", "destination": "/api/http?__route=/" },
+    { "source": "/healthz", "destination": "/api/http?__route=/healthz" },
+    { "source": "/telegram/webhook", "destination": "/api/http?__route=/telegram/webhook" },
+    { "source": "/v1/:path*", "destination": "/api/http?__route=/v1/:path*" },
+    { "source": "/internal/jobs/:path*", "destination": "/api/http?__route=/internal/jobs/:path*" }
+  ],
+  "functions": {
+    "api/media-queue.ts": {
+      "maxDuration": 1800,
+      "experimentalTriggers": [
+        { "type": "queue/v2beta", "topic": "series-download", "retryAfterSeconds": 30 }
+      ]
+    }
+  }
+}

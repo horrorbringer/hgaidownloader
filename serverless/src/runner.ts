@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./env";
+import type { JobEvent, JobInput, JobKind, JobStatus } from "./jobs";
 import {
   escapeHtml,
   formatBytes,
@@ -16,45 +17,6 @@ const UPDATE_TTL_MS = 2 * 24 * 60 * 60_000;
 const CONTAINER_INSTANCE = "standard-2";
 const INACTIVITY_TIMEOUT_MS = 30 * 60_000;
 const ACTIVE_STATUSES = "('starting','running','cancelling')";
-
-export type JobKind = "resolve" | "download";
-export type JobStatus =
-  | "queued"
-  | "starting"
-  | "running"
-  | "cancelling"
-  | "done"
-  | "failed"
-  | "cancelled";
-
-export interface JobInput {
-  jobId: string;
-  kind: JobKind;
-  url: string;
-  chatId: number | null;
-  messageId: number | null;
-  episodes: number[] | null;
-  callbackBase: string;
-}
-
-/** Container -> worker progress event. All fields are optional except `type`. */
-export interface JobEvent {
-  type: "stage" | "resolved" | "episode" | "done";
-  title?: string;
-  episodes?: Array<{ number: number; label: string }>;
-  note?: string;
-  number?: number;
-  label?: string;
-  state?: string;
-  percent?: number;
-  detail?: string;
-  bytes?: number;
-  fileId?: string;
-  error?: string;
-  ok?: boolean;
-  cancelled?: boolean;
-  summary?: string;
-}
 
 interface JobRow {
   id: string;
