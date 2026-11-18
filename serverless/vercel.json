@@ -11,9 +11,9 @@
   ],
   "functions": {
     "api/media-queue.ts": {
-      "maxDuration": 1800,
+      "maxDuration": 300,
       "experimentalTriggers": [
-        { "type": "queue/v2beta", "topic": "series-download", "retryAfterSeconds": 30 }
+        { "type": "queue/v2beta", "topic": "series-download", "retryAfterSeconds": 60 }
       ]
     }
   }

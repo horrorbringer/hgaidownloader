@@ -17,6 +17,7 @@ interface StoredJob extends JobInput {
   episodesView: JobEvent[];
   resolvedCount?: number;
   lastEdit?: number;
+  commandId?: string;
 }
 
 const jobKey = (id: string) => `series:job:${id}`;
@@ -56,7 +57,11 @@ export class VercelRunner implements JobRunner {
   }
 
   async claim(owner: string) {
-    return Boolean(await this.redis.set(ACTIVE, owner, { nx: true, ex: 1860 }));
+    const claimed = await this.redis.eval<string[], number>(
+      "local owner = redis.call('GET', KEYS[1]) if owner then if owner == ARGV[1] then return 1 end return 0 end redis.call('SET', KEYS[1], ARGV[1], 'EX', 2100) return 1",
+      [ACTIVE], [owner],
+    );
+    return claimed === 1;
   }
 
   async release(owner: string) {

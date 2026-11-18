@@ -103,8 +103,10 @@ The Vercel entry point in `api/http.ts` serves the same API and webhook paths.
 Vercel Queues starts jobs, Upstash Redis stores job state and enforces one
 active media job per deployment, and Vercel Sandbox runs the existing media
 worker. Videos go directly from the sandbox to Telegram. This deployment
-requires Vercel Pro or Enterprise with Fluid Compute for the 30-minute queue
-function, plus access to Vercel Container Registry and Sandbox custom images.
+uses short queue invocations with a 300-second limit. Media work runs separately
+in the Sandbox for up to 27 minutes. The queue checks about once a minute
+for completion or cancellation. Use Fluid Compute and a project with access
+to Vercel Queues, Container Registry, and Sandbox custom images.
 
 ### Configure the Vercel project
 
