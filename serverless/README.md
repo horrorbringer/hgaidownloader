@@ -106,7 +106,7 @@ worker. Videos go directly from the sandbox to Telegram. This deployment
 uses short queue invocations with a 300-second limit. Media work runs separately
 in the Sandbox for up to 27 minutes. The queue checks about once a minute
 for completion or cancellation. Use Fluid Compute and a project with access
-to Vercel Queues, Container Registry, and Sandbox custom images.
+to Vercel Queues and Vercel Sandbox.
 
 ### Configure the Vercel project
 
@@ -127,29 +127,32 @@ to Vercel Queues, Container Registry, and Sandbox custom images.
 | `API_KEY` | Random secret for the `X-API-Key` header |
 | `INTERNAL_SECRET` | Separate random secret for signed media progress callbacks |
 | `PUBLIC_BASE_URL` | Public production origin, e.g. `https://hgaidownloader.vercel.app` |
-| `MEDIA_SANDBOX_IMAGE` | Vercel Container Registry repository and tag, e.g. `media-worker:v1` |
+| `MEDIA_SANDBOX_SNAPSHOT_ID` | Snapshot ID printed by the setup script below |
 | `ALLOWED_HOSTS` | Optional comma-separated source hosts, defaults to `huangguoai.com` |
 
 Set `DEFAULT_CHAT_ID` if you want REST callers to be able to omit `chat_id`.
 Set `ALLOWED_CHAT_IDS` for an explicit REST delivery allowlist.
 
-### Publish the media image and deploy
+### Prepare the media worker without Docker
 
-From `serverless/`, link the local directory to the Vercel project and
-authenticate Docker for its registry. Run Docker Desktop before building.
+From `serverless/`, install the local dependencies and link to the same
+Vercel project that will run the API. The script installs Chromium, yt-dlp,
+and ffmpeg in a temporary Vercel Sandbox, checks that they run, and saves
+the worker as a snapshot.
 
 ```powershell
+npm ci
 npx vercel@latest link
-npx vercel@latest vcr login docker
-$image = "vcr.vercel.com/YOUR-TEAM/YOUR-PROJECT/media-worker:v1"
-docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push -t $image ./container
+npx vercel@latest env pull .env.vercel.local
+node --env-file=.env.vercel.local scripts/prepare-vercel-sandbox.mjs
 ```
 
-Wait for Vercel to finish preparing the image, then set `MEDIA_SANDBOX_IMAGE`
-to `media-worker:v1` in the same project. Push the repo to the production branch
-or run `npx vercel@latest --prod` from the linked `serverless/` directory.
-When releasing a new media worker, build and push a new tag and update the
-environment variable before deploying.
+Copy the printed snapshot ID into the production `MEDIA_SANDBOX_SNAPSHOT_ID`
+variable. Push the repo to the production branch or run
+`npx vercel@latest --prod` from the linked `serverless/` directory. When the
+media worker changes, rerun the script, update the snapshot ID, and redeploy.
+If you already published a registry image for an earlier deployment, the
+worker can still use `MEDIA_SANDBOX_IMAGE` when no snapshot ID is set.
 
 Open `https://YOUR-PROJECT.vercel.app/healthz` and check for `{"ok":true}`.
 The production endpoint must be publicly reachable for Telegram and media

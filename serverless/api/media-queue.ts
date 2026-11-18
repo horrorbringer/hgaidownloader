@@ -35,14 +35,15 @@ export default {
 
       try {
         const secret = process.env.INTERNAL_SECRET;
+        const snapshotId = process.env.MEDIA_SANDBOX_SNAPSHOT_ID;
         const image = process.env.MEDIA_SANDBOX_IMAGE;
         const baseUrl = process.env.PUBLIC_BASE_URL;
-        if (!botToken || !secret || !image || !baseUrl) {
-          throw new Error("Set TELEGRAM_BOT_TOKEN, INTERNAL_SECRET, MEDIA_SANDBOX_IMAGE and PUBLIC_BASE_URL");
+        if (!botToken || !secret || !baseUrl || (!snapshotId && !image)) {
+          throw new Error("Set TELEGRAM_BOT_TOKEN, INTERNAL_SECRET, PUBLIC_BASE_URL and MEDIA_SANDBOX_SNAPSHOT_ID");
         }
         const sandbox = await Sandbox.create({
+          ...(snapshotId ? { source: { type: "snapshot" as const, snapshotId } } : { image }),
           name,
-          image,
           persistent: false,
           timeout: 27 * 60_000,
           resources: { vcpus: 2 },
@@ -61,10 +62,10 @@ export default {
           };
           const command = await sandbox.runCommand({
             cmd: "node",
-            args: ["/app/dist/vercel-job.js"],
+            args: [snapshotId ? "/vercel/sandbox/media-worker/dist/vercel-job.js" : "/app/dist/vercel-job.js"],
             env: {
               MEDIA_JOB: JSON.stringify(request),
-              PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
+              PLAYWRIGHT_BROWSERS_PATH: snapshotId ? "/vercel/sandbox/media-browsers" : "/ms-playwright",
             },
             detached: true,
           });
