@@ -1,0 +1,24 @@
+{
+  "name": "hg-telegram-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke:container": "npm --prefix container run build && node scripts/smoke-container.mjs",
+    "container:build": "wrangler containers build ./container"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4",
+    "wrangler": "^4.0.0"
+  }
+}

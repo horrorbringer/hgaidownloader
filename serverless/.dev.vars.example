@@ -1,0 +1,10 @@
+# Copy to .dev.vars for `wrangler dev`. Never commit real values.
+TELEGRAM_BOT_TOKEN=123456:replace-me
+TELEGRAM_WEBHOOK_SECRET=replace-with-random-string
+API_KEY=replace-with-random-string
+INTERNAL_SECRET=replace-with-random-string
+ALLOWED_USER_IDS=123456789
+ALLOWED_CHAT_IDS=123456789
+# PUBLIC_BASE_URL is optional; requests build it from the incoming URL.
+# DEFAULT_CHAT_ID is optional; used by /v1 calls that omit chat_id.
+DEFAULT_CHAT_ID=

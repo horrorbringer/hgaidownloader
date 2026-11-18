@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hg-telegram-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ALLOWED_HOSTS": "huangguoai.com"
+  },
+  "containers": [
+    {
+      "class_name": "Runner",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "./container/Dockerfile",
+          "build_context": "./container"
+        }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUNNER",
+        "class_name": "Runner"
+      }
+    ]
+  },
+  "exports": {
+    "Runner": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
+}

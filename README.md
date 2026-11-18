@@ -187,3 +187,10 @@ Validation: `python -m unittest discover -s tests -v`. The manual GUI benchmark 
 `python tests/benchmark_gui.py`; one local 1,000-row run measured 37 ms for selection
 and 29 ms for filtering. These measurements are not a cross-platform performance
 guarantee.
+
+## Telegram bot (serverless)
+
+A minimal serverless variant lives in [serverless/](serverless/README.md): a
+Cloudflare Worker + Container with a Telegram bot and JSON API that downloads,
+compresses, and sends episodes to a chat. It reuses this app's episode detection
+and stream sniffing, and leaves the desktop app unchanged.
