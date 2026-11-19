@@ -17,8 +17,11 @@ from media import MediaError, run_media_job
 
 logger = logging.getLogger(__name__)
 ACTIVE = {"queued", "running", "cancelling"}
+LOOKUP_COMMANDS = {"/episodes", "/eps", "/resolve"}
 HELP = (
     "/episodes URL — list episodes\n"
+    "/dl 1,3-5 — download episodes from your last lookup\n"
+    "/dl — download the first 10 from your last lookup\n"
     "/dl URL 1,3-5 — download selected episodes\n"
     "/dl URL — download the first 10 episodes\n"
     "/status — show active jobs\n"
@@ -56,12 +59,17 @@ def episode_numbers(value):
 
 class Chat(BaseModel):
     id: StrictInt
+    is_bot: bool = False
 
 
-class Message(BaseModel):
+class MessageContent(BaseModel):
     chat: Chat
     sender: Chat | None = Field(default=None, alias="from")
     text: str | None = None
+
+
+class Message(MessageContent):
+    reply_to_message: MessageContent | None = None
 
 
 class Update(BaseModel):
@@ -116,7 +124,15 @@ class Service:
         self.jobs = {}
         self.queue = asyncio.Queue(maxsize=100)
         self.updates = OrderedDict()
+        self.recent_series: OrderedDict[tuple[int, int], str] = OrderedDict()
         self.active_task = None
+
+    def remember_series(self, chat_id, user_id, url):
+        key = (chat_id, user_id)
+        self.recent_series[key] = url
+        self.recent_series.move_to_end(key)
+        if len(self.recent_series) > 1024:
+            self.recent_series.popitem(last=False)
 
     def source_url(self, value):
         value = value.strip()
@@ -188,7 +204,12 @@ class Service:
                 if job.kind == "resolve" and job.status == "done" and job.resolved:
                     episodes = job.resolved["episodes"] or []
                     listing = ", ".join(str(episode["number"]) for episode in episodes)
-                    message = f"{job.resolved['title'] or 'Series'}\nEpisodes: {listing or 'none'}"
+                    message = (
+                        f"Series URL: {job.url}\n"
+                        f"{job.resolved['title'] or 'Series'}\n"
+                        "Reply with /dl 1,3-5 or /dl for the first 10.\n"
+                        f"Episodes: {listing or 'none'}"
+                    )
                 else:
                     message = f"Job {job.id}: {job.status}."
                     if job.error:
@@ -294,6 +315,23 @@ async def webhook(
     return {"ok": True}
 
 
+def replied_series(message):
+    reply = message.reply_to_message
+    if not reply or not reply.text or not reply.sender:
+        return None
+    first_line = reply.text.splitlines()[0]
+    if reply.sender.is_bot and first_line.startswith("Series URL: "):
+        return first_line.removeprefix("Series URL: ")
+    parts = first_line.split()
+    if (
+        reply.sender.id == message.sender.id
+        and len(parts) >= 2
+        and parts[0].split("@", 1)[0].lower() in LOOKUP_COMMANDS
+    ):
+        return parts[1]
+    return None
+
+
 async def handle_message(service, message):
     if not message or not message.sender or not message.text or not message.text.strip():
         return
@@ -318,10 +356,22 @@ async def handle_message(service, message):
                 service.cancel(job)
         await service.send(chat_id, "Cancellation requested." if jobs else "No active jobs.")
         return
-    if command in {"/episodes", "/resolve", "/dl", "/download"}:
-        kind = "resolve" if command in {"/episodes", "/resolve"} else "download"
+    if command in LOOKUP_COMMANDS:
+        kind = "resolve"
         url = parts[1] if len(parts) > 1 else ""
-        selection = parts[2] if len(parts) > 2 and kind == "download" else None
+        selection = None
+    elif command in {"/dl", "/download"}:
+        kind = "download"
+        arguments = text[len(parts[0]):].strip()
+        if not arguments or re.fullmatch(r"[0-9,\s-]+", arguments):
+            url = replied_series(message) or service.recent_series.get((chat_id, message.sender.id))
+            if not url:
+                await service.send(chat_id, "Send /episodes URL first, or reply to an episode list with /dl.")
+                return
+            selection = arguments or None
+        else:
+            url = parts[1]
+            selection = parts[2] if len(parts) > 2 else None
     elif re.match(r"^(?:https?://|[\w.-]+\.[\w-]+/)", text, re.I):
         kind, url, selection = "download", text, None
     else:
@@ -332,6 +382,8 @@ async def handle_message(service, message):
     except (ValueError, HTTPException) as error:
         await service.send(chat_id, str(error) if isinstance(error, ValueError) else error.detail)
         return
+    if kind == "resolve":
+        service.remember_series(chat_id, message.sender.id, job.url)
     try:
         await service.send(chat_id, f"Queued {kind} job {job.id}.")
     except HTTPException:

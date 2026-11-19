@@ -44,7 +44,7 @@ Invoke-RestMethod -Method Post -Uri "https://api.telegram.org/bot${env:TELEGRAM_
 
 Telegram supports one active webhook per bot. Registering this service replaces any webhook already configured for that token.
 
-Send `/help` from an allowed Telegram account. Use `/episodes URL` to list episodes or `/dl URL 1,3-5` to download a selection. Sending a URL by itself queues the first ten episodes. Use `/status` or `/cancel` to manage the chat's jobs.
+Send `/help` from an allowed Telegram account. Use `/episodes URL` to list episodes. Then reply to the episode list with `/dl 1,3-5` for a selection or `/dl` for the first ten. Replying to the list works across app restarts and Vercel instances. You can also send those commands as a new message while the latest lookup is still in memory. Use `/dl URL 1,3-5` to specify a different series. Sending a URL by itself queues the first ten episodes. Use `/status` or `/cancel` to manage the chat's jobs.
 
 ## JSON API
 
