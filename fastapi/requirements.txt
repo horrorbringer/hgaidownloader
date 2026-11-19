@@ -1,0 +1,5 @@
+fastapi>=0.115,<1
+httpx>=0.28,<1
+uvicorn[standard]>=0.54,<1
+playwright>=1.50,<2
+yt-dlp

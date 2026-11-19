@@ -16,3 +16,7 @@ __pycache__/
 /downloads/
 /series_gui_settings.json
 /series_library.sqlite3*
+
+.vercel
+.env*
+!/fastapi/.env.example
