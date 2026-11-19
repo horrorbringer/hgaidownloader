@@ -20,3 +20,4 @@ __pycache__/
 .vercel
 .env*
 !/fastapi/.env.example
+/fastapi/runtime-lib/

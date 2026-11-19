@@ -48,6 +48,10 @@ If you registered the webhook with only `message` updates, rerun the command abo
 
 Send `/help` from an allowed Telegram account. Use `/episodes URL`, then tap an episode or the button to download the first ten. Reply to the episode list with `1,3-5` for a custom selection. You can also use `/dl 1,3-5` as a new message while the latest lookup is still in memory. Use `/dl URL 1,3-5` to specify a series directly. Use **Cancel job** on a queued job, or `/status` and `/cancel` to manage jobs in the chat.
 
+## Vercel runtime
+
+Use `fastapi` as the Vercel project root. The install command in `vercel.json` copies Amazon Linux's `libatomic.so.1` into the function bundle for the Playwright driver. Chromium and its system libraries are also needed for episode lookup, and downloads require FFmpeg and FFprobe in the runtime.
+
 ## JSON API
 
 Send your API key in the `X-API-Key` header.

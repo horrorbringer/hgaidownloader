@@ -17,6 +17,16 @@ from pydantic import BaseModel, Field, StrictInt
 from media import MediaError, run_media_job
 
 logger = logging.getLogger(__name__)
+
+
+class TelegramURLFilter(logging.Filter):
+    def filter(self, record):
+        # Telegram puts the bot token in the request URL.
+        return "https://api.telegram.org/bot" not in record.getMessage()
+
+
+logging.getLogger("httpx").addFilter(TelegramURLFilter())
+
 ACTIVE = {"queued", "running", "cancelling"}
 LOOKUP_COMMANDS = {"/episodes", "/eps", "/resolve"}
 HELP = (

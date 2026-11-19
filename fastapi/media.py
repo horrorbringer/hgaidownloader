@@ -18,6 +18,12 @@ UPLOAD_LIMIT = 47 * 1024 * 1024
 MEDIA = re.compile(r"\.(?:m3u8|mp4|mpd|flv)$", re.I)
 EPISODE_LABEL = re.compile(r"第\s*(\d+)\s*集|^ep\.?\s*(\d+)", re.I)
 
+# Playwright's Node subprocess inherits this path when launched on Vercel.
+bundled_lib = Path(__file__).resolve().parent / "runtime-lib"
+if sys.platform == "linux" and (bundled_lib / "libatomic.so.1").is_file():
+    current_path = os.environ.get("LD_LIBRARY_PATH")
+    os.environ["LD_LIBRARY_PATH"] = f"{bundled_lib}:{current_path}" if current_path else str(bundled_lib)
+
 
 class MediaError(Exception):
     pass
