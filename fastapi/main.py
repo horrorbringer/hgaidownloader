@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import traceback
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -19,14 +20,27 @@ logger = logging.getLogger(__name__)
 ACTIVE = {"queued", "running", "cancelling"}
 LOOKUP_COMMANDS = {"/episodes", "/eps", "/resolve"}
 HELP = (
-    "/episodes URL — list episodes\n"
-    "/dl 1,3-5 — download episodes from your last lookup\n"
-    "/dl — download the first 10 from your last lookup\n"
-    "/dl URL 1,3-5 — download selected episodes\n"
-    "/dl URL — download the first 10 episodes\n"
-    "/status — show active jobs\n"
+    "Series Downloader\n\n"
+    "1. Send /episodes followed by a series URL.\n"
+    "2. Tap an episode or Download first 10.\n"
+    "   For a custom selection, reply with 1,3-5.\n\n"
+    "/dl URL 1,3-5 — download directly\n"
+    "/status — view active jobs\n"
     "/cancel — cancel active jobs"
 )
+EPISODE_RANGE_TEXT = re.compile(r"[0-9,\s-]+")
+SERIES_URL_PREFIX = "Series URL: "
+
+
+def episode_buttons(episodes):
+    numbers = [episode["number"] for episode in episodes[:10]]
+    rows = [
+        [{"text": str(number), "callback_data": f"download:{number}"} for number in numbers[i:i + 5]]
+        for i in range(0, len(numbers), 5)
+    ]
+    if len(numbers) > 1:
+        rows.append([{"text": f"Download first {len(numbers)}", "callback_data": "download:default"}])
+    return rows
 
 
 def id_list(name):
@@ -72,9 +86,17 @@ class Message(MessageContent):
     reply_to_message: MessageContent | None = None
 
 
+class CallbackQuery(BaseModel):
+    id: str
+    sender: Chat = Field(alias="from")
+    message: MessageContent | None = None
+    data: str | None = None
+
+
 class Update(BaseModel):
     update_id: StrictInt
     message: Message | None = None
+    callback_query: CallbackQuery | None = None
 
 
 class JobInput(BaseModel):
@@ -151,13 +173,12 @@ class Service:
             raise ValueError("Use an HTTP(S) URL from an allowed source host.")
         return value
 
-    async def send(self, chat_id, message):
+    async def telegram(self, method, payload):
         if not self.bot_token:
             raise HTTPException(503, "Telegram bot token is missing.")
         try:
             response = await self.client.post(
-                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                json={"chat_id": chat_id, "text": message[:2000]},
+                f"https://api.telegram.org/bot{self.bot_token}/{method}", json=payload,
             )
             response.raise_for_status()
             if response.json().get("ok"):
@@ -165,6 +186,25 @@ class Service:
         except (httpx.HTTPError, ValueError):
             pass
         raise HTTPException(502, "Telegram message delivery failed.")
+
+    async def send(self, chat_id, message, buttons=None):
+        payload = {
+            "chat_id": chat_id,
+            "text": message[:4000],
+            "link_preview_options": {"is_disabled": True},
+        }
+        if buttons:
+            payload["reply_markup"] = {"inline_keyboard": buttons}
+        await self.telegram("sendMessage", payload)
+
+    async def answer_callback(self, callback_id, text, alert=False):
+        try:
+            await self.telegram(
+                "answerCallbackQuery",
+                {"callback_query_id": callback_id, "text": text[:200], "show_alert": alert},
+            )
+        except HTTPException:
+            logger.warning("Could not acknowledge a Telegram button press")
 
     def enqueue(self, kind, raw_url, episodes, chat_id):
         url = self.source_url(raw_url)
@@ -197,25 +237,34 @@ class Service:
                         job.error = str(error)
                     except Exception as error:
                         job.status = "failed"
-                        job.error = "Media processing failed."
-                        logger.warning("Job %s failed with %s", job.id, type(error).__name__)
+                        stage = (job.progress or {}).get("state", "starting")
+                        job.error = f"Media processing failed during {stage.replace('_', ' ')}."
+                        frames = traceback.extract_tb(error.__traceback__)
+                        logger.warning(
+                            "Job %s failed during %s (%s). Trace: %s",
+                            job.id, stage, type(error).__name__,
+                            " -> ".join(f"{frame.name}:{frame.lineno}" for frame in frames[-8:]),
+                        )
                     finally:
                         self.active_task = None
+                buttons = None
                 if job.kind == "resolve" and job.status == "done" and job.resolved:
                     episodes = job.resolved["episodes"] or []
                     listing = ", ".join(str(episode["number"]) for episode in episodes)
                     message = (
-                        f"Series URL: {job.url}\n"
+                        f"{SERIES_URL_PREFIX}{job.url}\n\n"
                         f"{job.resolved['title'] or 'Series'}\n"
-                        "Reply with /dl 1,3-5 or /dl for the first 10.\n"
-                        f"Episodes: {listing or 'none'}"
+                        f"Episodes: {listing or 'none'}\n\n"
+                        "Tap an episode or reply with a range like 1,3-5."
                     )
+                    buttons = episode_buttons(episodes)
                 else:
-                    message = f"Job {job.id}: {job.status}."
+                    heading = "Download" if job.kind == "download" else "Episode lookup"
+                    message = f"{heading} {job.status}.\nJob: {job.id}"
                     if job.error:
-                        message += f" {job.error}"
+                        message += f"\n\n{job.error}"
                 try:
-                    await self.send(job.chat_id, message)
+                    await self.send(job.chat_id, message, buttons)
                 except HTTPException:
                     logger.warning("Could not deliver completion for job %s", job.id)
             finally:
@@ -306,7 +355,10 @@ async def webhook(
         return {"ok": True}
     service.updates[update.update_id] = None
     try:
-        await handle_message(service, update.message)
+        if update.callback_query:
+            await handle_callback(service, update.callback_query)
+        else:
+            await handle_message(service, update.message)
     except Exception:
         service.updates.pop(update.update_id, None)
         raise
@@ -315,14 +367,22 @@ async def webhook(
     return {"ok": True}
 
 
+def episode_list_url(message):
+    if message and message.text and message.sender and message.sender.is_bot:
+        first_line = message.text.partition("\n")[0]
+        if first_line.startswith(SERIES_URL_PREFIX):
+            return first_line.removeprefix(SERIES_URL_PREFIX)
+    return None
+
+
 def replied_series(message):
     reply = message.reply_to_message
     if not reply or not reply.text or not reply.sender:
         return None
-    first_line = reply.text.splitlines()[0]
-    if reply.sender.is_bot and first_line.startswith("Series URL: "):
-        return first_line.removeprefix("Series URL: ")
-    parts = first_line.split()
+    url = episode_list_url(reply)
+    if url:
+        return url
+    parts = reply.text.split()
     if (
         reply.sender.id == message.sender.id
         and len(parts) >= 2
@@ -332,11 +392,53 @@ def replied_series(message):
     return None
 
 
+def allowed_chat_user(service, chat_id, user_id):
+    return user_id in service.users and (not service.chats or chat_id in service.chats)
+
+
+async def announce_job(service, job):
+    label = "Download queued" if job.kind == "download" else "Episode lookup queued"
+    buttons = [[{"text": "Cancel job", "callback_data": f"cancel:{job.id}"}]]
+    try:
+        await service.send(job.chat_id, f"{label}\nJob: {job.id}", buttons)
+    except HTTPException:
+        logger.warning("Could not deliver acknowledgement for job %s", job.id)
+
+
+async def handle_callback(service, callback):
+    message = callback.message
+    if not message or not allowed_chat_user(service, message.chat.id, callback.sender.id):
+        await service.answer_callback(callback.id, "This action is unavailable.")
+        return
+
+    action, _, value = (callback.data or "").partition(":")
+    if action == "cancel":
+        job = service.jobs.get(value)
+        if not job or job.chat_id != message.chat.id or job.status not in ACTIVE:
+            await service.answer_callback(callback.id, "This job is no longer available to cancel.")
+            return
+        service.cancel(job)
+        await service.answer_callback(callback.id, "Cancellation requested.")
+        return
+
+    url = episode_list_url(message)
+    if action != "download" or not url or not (value == "default" or value.isascii() and value.isdecimal()):
+        await service.answer_callback(callback.id, "Run /episodes again to get a new episode list.")
+        return
+    try:
+        job = service.enqueue("download", url, None if value == "default" else value, message.chat.id)
+    except (ValueError, HTTPException) as error:
+        await service.answer_callback(callback.id, str(error) if isinstance(error, ValueError) else error.detail, alert=True)
+        return
+    await service.answer_callback(callback.id, "Download queued.")
+    await announce_job(service, job)
+
+
 async def handle_message(service, message):
     if not message or not message.sender or not message.text or not message.text.strip():
         return
     chat_id = message.chat.id
-    if message.sender.id not in service.users or (service.chats and chat_id not in service.chats):
+    if not allowed_chat_user(service, chat_id, message.sender.id):
         return
     text = message.text.strip()
     parts = text.split(maxsplit=2)
@@ -348,7 +450,7 @@ async def handle_message(service, message):
             if job.status == "running" else f"{job.id}: {job.status}"
             for job in jobs
         ]
-        await service.send(chat_id, "\n".join(lines) or "No active jobs.")
+        await service.send(chat_id, ("Active jobs\n\n" + "\n".join(lines)) if lines else "No active jobs.")
         return
     if command in {"/cancel", "/stop"}:
         for job in jobs:
@@ -363,7 +465,7 @@ async def handle_message(service, message):
     elif command in {"/dl", "/download"}:
         kind = "download"
         arguments = text[len(parts[0]):].strip()
-        if not arguments or re.fullmatch(r"[0-9,\s-]+", arguments):
+        if not arguments or EPISODE_RANGE_TEXT.fullmatch(arguments):
             url = replied_series(message) or service.recent_series.get((chat_id, message.sender.id))
             if not url:
                 await service.send(chat_id, "Send /episodes URL first, or reply to an episode list with /dl.")
@@ -372,6 +474,8 @@ async def handle_message(service, message):
         else:
             url = parts[1]
             selection = parts[2] if len(parts) > 2 else None
+    elif EPISODE_RANGE_TEXT.fullmatch(text) and (url := episode_list_url(message.reply_to_message)):
+        kind, selection = "download", text
     elif re.match(r"^(?:https?://|[\w.-]+\.[\w-]+/)", text, re.I):
         kind, url, selection = "download", text, None
     else:
@@ -384,10 +488,7 @@ async def handle_message(service, message):
         return
     if kind == "resolve":
         service.remember_series(chat_id, message.sender.id, job.url)
-    try:
-        await service.send(chat_id, f"Queued {kind} job {job.id}.")
-    except HTTPException:
-        logger.warning("Could not deliver acknowledgement for job %s", job.id)
+    await announce_job(service, job)
 
 
 def create_job(service, payload, kind):

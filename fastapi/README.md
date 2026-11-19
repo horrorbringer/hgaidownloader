@@ -38,13 +38,15 @@ Expose the API through an HTTPS reverse proxy or tunnel forwarding to port 8000.
 Invoke-RestMethod -Method Post -Uri "https://api.telegram.org/bot${env:TELEGRAM_BOT_TOKEN}/setWebhook" -ContentType "application/json" -Body (@{
     url = "https://YOUR_HOST/telegram/webhook"
     secret_token = $env:TELEGRAM_WEBHOOK_SECRET
-    allowed_updates = @("message")
+    allowed_updates = @("message", "callback_query")
 } | ConvertTo-Json)
 ```
 
 Telegram supports one active webhook per bot. Registering this service replaces any webhook already configured for that token.
 
-Send `/help` from an allowed Telegram account. Use `/episodes URL` to list episodes. Then reply to the episode list with `/dl 1,3-5` for a selection or `/dl` for the first ten. Replying to the list works across app restarts and Vercel instances. You can also send those commands as a new message while the latest lookup is still in memory. Use `/dl URL 1,3-5` to specify a different series. Sending a URL by itself queues the first ten episodes. Use `/status` or `/cancel` to manage the chat's jobs.
+If you registered the webhook with only `message` updates, rerun the command above so Telegram also sends button presses.
+
+Send `/help` from an allowed Telegram account. Use `/episodes URL`, then tap an episode or the button to download the first ten. Reply to the episode list with `1,3-5` for a custom selection. You can also use `/dl 1,3-5` as a new message while the latest lookup is still in memory. Use `/dl URL 1,3-5` to specify a series directly. Use **Cancel job** on a queued job, or `/status` and `/cancel` to manage jobs in the chat.
 
 ## JSON API
 

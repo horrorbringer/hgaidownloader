@@ -3,6 +3,7 @@ import json
 import math
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -77,19 +78,23 @@ async def discover(page):
                     number, Episode(number, item["label"], item["url"], f'[data-hg-episode="{item["id"]}"]')
                 )
 
+    path = re.fullmatch(r"/video/(\d+)(?:/ep-([1-9]\d*))?/?", urlsplit(page.url).path)
     if not episodes:
-        path = re.fullmatch(r"/video/(\d+)(?:/ep-\d+)?/?", urlsplit(page.url).path)
         description = await page.locator('meta[name="description"]').evaluate_all(
             "nodes => nodes[0]?.content || ''"
         )
         count = re.search(r"全\s*(\d{1,4})\s*集", description)
         if path and count and 1 <= int(count[1]) <= 1000:
-            base = urljoin(page.url, f"/video/{path[1]}/")
+            base = urljoin(page.url, f"/video/{path[1]}")
             for number in range(1, int(count[1]) + 1):
-                episodes[number] = Episode(number, f"第{number}集", base if number == 1 else f"{base}ep-{number}")
+                url = base if number == 1 else f"{base}/ep-{number}"
+                episodes[number] = Episode(number, f"第{number}集", url)
 
     title = re.split(r"[-|]", await page.title(), maxsplit=1)[0].strip() or "Series"
-    return title, dict(sorted(episodes.items())) or {1: Episode(1, "Episode 1", page.url)}
+    if not episodes:
+        number = int(path[2]) if path and path[2] else 1
+        episodes[number] = Episode(number, f"Episode {number}", page.url)
+    return title, dict(sorted(episodes.items()))
 
 
 async def find_stream(service, page, episode, captured, seen):
@@ -218,19 +223,38 @@ async def prepare_video(stream, referer, directory, number):
 
 
 async def run_media_job(service, job):
+    job.progress = {"type": "stage", "state": "starting_playwright"}
     try:
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch()
+            job.progress = {"type": "stage", "state": "launching_chromium"}
+            try:
+                browser = await playwright.chromium.launch()
+            except BrowserError as error:
+                detail = str(error)
+                if "Executable doesn't exist" in detail:
+                    raise MediaError("Chromium is missing from the runtime. Install it with python -m playwright install chromium.") from None
+                if "missing dependencies" in detail.lower() or "error while loading shared libraries" in detail.lower():
+                    raise MediaError("Chromium is missing required system libraries.") from None
+                raise MediaError("Chromium failed to start.") from None
             try:
                 await process_series(service, job, browser)
             finally:
                 await browser.close()
-    except BrowserError as error:
-        if "Executable doesn't exist" in str(error):
-            raise MediaError("Install Chromium with python -m playwright install chromium.") from None
+    except (OSError, NotImplementedError) as error:
+        if job.progress["state"] == "starting_playwright":
+            raise MediaError(f"The runtime could not start the Playwright driver ({type(error).__name__}).") from None
+        raise
+    except BrowserError:
         raise MediaError("Chromium could not open or read the series page.") from None
     except ValueError:
         raise MediaError("The series redirected to an invalid or disallowed URL.") from None
+    except Exception as error:
+        if (
+            job.progress["state"] == "starting_playwright"
+            and "Connection closed while reading from the driver" in str(error)
+        ):
+            raise MediaError("The Playwright driver exited during startup. Check the deployment's runtime logs.") from None
+        raise
 
 
 async def process_series(service, job, browser):
@@ -256,6 +280,11 @@ async def process_series(service, job, browser):
     }
     if job.kind == "resolve":
         return
+
+    job.progress = {"type": "stage", "state": "checking_media_tools"}
+    missing = [binary for binary in ("ffmpeg", "ffprobe") if not shutil.which(binary)]
+    if missing:
+        raise MediaError(f"Missing from the runtime PATH: {', '.join(missing)}.")
 
     selected = job.episodes or list(episodes)[:10]
     seen = set()
